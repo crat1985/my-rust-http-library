@@ -86,7 +86,7 @@ impl Router {
             routes: HashMap::new(),
         }
     }
-    pub fn route<E: IntoResponse>(
+    pub fn route(
         mut self,
         uri: &str,
         MethodAndHandlerFn(method, handler): MethodAndHandlerFn,
