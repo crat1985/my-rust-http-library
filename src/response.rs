@@ -55,9 +55,9 @@ impl IntoResponse for StatusCode {
     }
 }
 
-impl IntoResponse for Infallible {
+impl<E: IntoResponse> IntoResponse for Result<E, Infallible> {
     fn into_response(self) -> Response {
-        StatusCode::Ok.into_response()
+        self.unwrap().into_response()
     }
 }
 
