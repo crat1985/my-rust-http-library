@@ -88,7 +88,7 @@ impl BodyKind {
         match self {
             BodyKind::Html => "text/html",
             BodyKind::Json => "application/json",
-            BodyKind::Text => "text/text",
+            BodyKind::Text => "text/plain",
         }
     }
 }

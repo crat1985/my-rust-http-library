@@ -1,22 +1,97 @@
 use std::{collections::HashMap, io::Write, net::TcpStream};
 
+use crate::response::Response;
+
 use super::{method::Method, request::Request, response::IntoResponse};
 
-pub type HandlerFn<E> = fn(req: Request) -> E;
+type HandlerFn = Box<dyn Fn(Request) -> Response + Send + Sync>;
 
-pub struct Router<E: IntoResponse> {
-    routes: HashMap<Route, HandlerFn<E>>,
+pub struct MethodAndHandlerFn(Method, HandlerFn);
+
+pub fn get<E, F>(handler: E) -> MethodAndHandlerFn
+where
+    E: Fn(Request) -> F + 'static + Send + Sync,
+    F: IntoResponse,
+{
+    MethodAndHandlerFn(
+        Method::Get,
+        Box::new(move |req| handler(req).into_response()),
+    )
+}
+
+pub fn post<E, F>(handler: E) -> MethodAndHandlerFn
+where
+    E: Fn(Request) -> F + 'static + Send + Sync,
+    F: IntoResponse,
+{
+    MethodAndHandlerFn(
+        Method::Post,
+        Box::new(move |req| handler(req).into_response()),
+    )
+}
+
+pub fn put<E, F>(handler: E) -> MethodAndHandlerFn
+where
+    E: Fn(Request) -> F + 'static + Send + Sync,
+    F: IntoResponse,
+{
+    MethodAndHandlerFn(
+        Method::Put,
+        Box::new(move |req| handler(req).into_response()),
+    )
+}
+
+pub fn patch<E, F>(handler: E) -> MethodAndHandlerFn
+where
+    E: Fn(Request) -> F + 'static + Send + Sync,
+    F: IntoResponse,
+{
+    MethodAndHandlerFn(
+        Method::Patch,
+        Box::new(move |req| handler(req).into_response()),
+    )
+}
+
+pub fn options<E, F>(handler: E) -> MethodAndHandlerFn
+where
+    E: Fn(Request) -> F + 'static + Send + Sync,
+    F: IntoResponse,
+{
+    MethodAndHandlerFn(
+        Method::Options,
+        Box::new(move |req| handler(req).into_response()),
+    )
+}
+
+pub fn delete<E, F>(handler: E) -> MethodAndHandlerFn
+where
+    E: Fn(Request) -> F + 'static + Send + Sync,
+    F: IntoResponse,
+{
+    MethodAndHandlerFn(
+        Method::Delete,
+        Box::new(move |req| handler(req).into_response()),
+    )
+}
+
+pub struct Router {
+    routes: HashMap<Route, HandlerFn>,
 }
 
 const NOT_FOUND: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
 
-impl<E: IntoResponse> Router<E> {
+impl Router {
     pub fn new() -> Self {
         Self {
             routes: HashMap::new(),
         }
     }
-    pub fn route(mut self, route: Route, handler: HandlerFn<E>) -> Self {
+    pub fn route<E: IntoResponse>(
+        mut self,
+        uri: &str,
+        MethodAndHandlerFn(method, handler): MethodAndHandlerFn,
+    ) -> Self {
+        let route = Route::new(method, uri);
         self.routes.insert(route, handler);
         self
     }

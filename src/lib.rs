@@ -15,7 +15,7 @@ pub mod response;
 pub mod router;
 pub mod status_code;
 
-pub fn serve<E: IntoResponse + 'static>(listener: TcpListener, router: Router<E>) {
+pub fn serve<E: IntoResponse + 'static>(listener: TcpListener, router: Router) {
     let router = Arc::new(router);
     let mut threads = Vec::new();
     for stream in listener.incoming() {
@@ -33,7 +33,7 @@ pub fn serve<E: IntoResponse + 'static>(listener: TcpListener, router: Router<E>
         .collect::<Vec<()>>();
 }
 
-fn handle_client<E: IntoResponse>(mut stream: TcpStream, router: &Router<E>) {
+fn handle_client(mut stream: TcpStream, router: &Router) {
     let req = match Request::new(&mut stream) {
         Ok(req) => req,
         Err(mut e) => {
