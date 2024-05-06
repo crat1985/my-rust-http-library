@@ -1,21 +1,14 @@
 use std::{collections::HashMap, io::Write, net::TcpStream};
 
-use super::{
-    method::Method,
-    request::Request,
-    response::{IntoResponse, Response},
-};
+use super::{method::Method, request::Request, response::IntoResponse};
 
-pub type HandlerFn<E: IntoResponse> = fn(req: Request) -> Result<Response, E>;
+pub type HandlerFn<E> = fn(req: Request) -> E;
 
 pub struct Router<E: IntoResponse> {
     routes: HashMap<Route, HandlerFn<E>>,
 }
 
-const NOT_FOUND: &str = concat!(
-    "HTTP/1.1 404 Not Found\r\n\r\n",
-    include_str!("../../html/404.html")
-);
+const NOT_FOUND: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
 
 impl<E: IntoResponse> Router<E> {
     pub fn new() -> Self {
@@ -37,10 +30,7 @@ impl<E: IntoResponse> Router<E> {
             }
         };
         let _ = route;
-        let mut res = match handler(req) {
-            Ok(res) => res,
-            Err(e) => e.into_response(),
-        };
+        let mut res = handler(req).into_response();
 
         res.send_to_stream(stream);
     }

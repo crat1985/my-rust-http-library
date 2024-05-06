@@ -43,7 +43,7 @@ impl Request {
         let mut headers = HashMap::new();
         loop {
             let mut line = String::new();
-            buf.read_line(&mut line);
+            buf.read_line(&mut line).unwrap();
             let line = line.trim();
             if line.is_empty() {
                 break;

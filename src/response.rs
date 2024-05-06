@@ -43,6 +43,12 @@ pub trait IntoResponse {
     fn into_response(self) -> Response;
 }
 
+impl IntoResponse for Response {
+    fn into_response(self) -> Response {
+        self
+    }
+}
+
 impl IntoResponse for StatusCode {
     fn into_response(self) -> Response {
         ResponseBuilder::new().with_status_code(self).build()
@@ -52,6 +58,15 @@ impl IntoResponse for StatusCode {
 impl IntoResponse for Infallible {
     fn into_response(self) -> Response {
         StatusCode::Ok.into_response()
+    }
+}
+
+impl<E: IntoResponse, F: IntoResponse> IntoResponse for Result<E, F> {
+    fn into_response(self) -> Response {
+        match self {
+            Ok(res) => res.into_response(),
+            Err(e) => e.into_response(),
+        }
     }
 }
 
