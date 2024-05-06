@@ -5,7 +5,7 @@ use std::{
 
 use crate::request::Request;
 
-use self::{response::IntoResponse, router::Router};
+use self::router::Router;
 
 pub mod header;
 pub mod http_version;
@@ -15,7 +15,7 @@ pub mod response;
 pub mod router;
 pub mod status_code;
 
-pub fn serve<E: IntoResponse + 'static>(listener: TcpListener, router: Router) {
+pub fn serve(listener: TcpListener, router: Router) {
     let router = Arc::new(router);
     let mut threads = Vec::new();
     for stream in listener.incoming() {
