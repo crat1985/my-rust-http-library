@@ -94,6 +94,12 @@ impl<S: Clone + Send + Sync> Router<S> {
             state: (),
         }
     }
+    pub fn with_state(state: S) -> Router<S> {
+        Router {
+            routes: HashMap::new(),
+            state,
+        }
+    }
     pub fn route(
         mut self,
         uri: &str,
@@ -101,10 +107,6 @@ impl<S: Clone + Send + Sync> Router<S> {
     ) -> Self {
         let route = Route::new(method, uri);
         self.routes.insert(route, handler);
-        self
-    }
-    pub fn with_state(mut self, state: S) -> Self {
-        self.state = state;
         self
     }
     pub fn handle(&self, req: Request, stream: &mut TcpStream) {
