@@ -80,14 +80,14 @@ where
     )
 }
 
-pub struct Router<S: Clone + Send + Sync> {
+pub struct Router<S: Clone> {
     routes: HashMap<Route, HandlerFn<S>>,
     state: S,
 }
 
 const NOT_FOUND: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
 
-impl<S: Clone + Send + Sync> Router<S> {
+impl<S: Clone> Router<S> {
     pub fn new() -> Router<()> {
         Router {
             routes: HashMap::new(),

@@ -55,7 +55,7 @@ fn handle_client<S: Clone + Send + Sync>(mut stream: TcpStream, router: &Router<
         }
     };
 
-    println!("Request : {req:#?}");
+    println!("Request : {req:?}");
 
     router.handle(req, &mut stream)
 }

@@ -1,21 +1,21 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
-    io::{BufRead, BufReader, Read},
+    io::{BufRead, BufReader},
     net::{SocketAddr, TcpStream},
 };
 
-use crate::{body::Body, error::HttpError, HttpResult};
+use crate::{body::BodyTrait, error::HttpError, HttpResult};
 
 use super::{http_version::HttpVersion, method::Method};
 
 #[derive(Debug)]
 pub struct Request {
-    pub peer_addr: SocketAddr,
-    pub method: Method,
-    pub uri: String,
-    pub http_version: HttpVersion,
-    pub headers: HashMap<String, String>,
-    pub body: Option<Body>,
+    peer_addr: SocketAddr,
+    method: Method,
+    uri: String,
+    http_version: HttpVersion,
+    headers: HashMap<String, String>,
+    body: Option<Vec<u8>>,
 }
 
 impl Request {
@@ -51,7 +51,8 @@ impl Request {
                             return Err(HttpError::InvalidLength(e));
                         }
                     };
-                    Self::get_body(&mut buf, content_length_header)
+                    let body = Vec::<u8>::parse_request(&mut buf, content_length_header)?;
+                    Some(body)
                 }
             }
         };
@@ -98,17 +99,42 @@ impl Request {
         headers
     }
 
-    fn get_body(buf: &mut BufReader<&mut TcpStream>, content_length_header: usize) -> Option<Body> {
-        let mut body = Vec::with_capacity(content_length_header);
-        let count = buf.read(&mut body).unwrap();
-        if count == 0 {
-            None
-        } else {
-            let body = match String::from_utf8(body.clone()) {
-                Ok(body) => Body::String(body),
-                Err(_) => Body::Bytes(body),
-            };
-            Some(body)
-        }
+    pub fn peer_addr(&self) -> SocketAddr {
+        self.peer_addr
+    }
+
+    pub fn method(&self) -> &Method {
+        &self.method
+    }
+
+    pub fn uri(&self) -> &str {
+        &self.uri
+    }
+
+    pub fn http_version(&self) -> &HttpVersion {
+        &self.http_version
+    }
+
+    pub fn headers(&self) -> &HashMap<String, String> {
+        &self.headers
+    }
+
+    ///Consumes the body
+    pub fn bytes_body(&mut self) -> Option<Vec<u8>> {
+        self.body.take()
+    }
+
+    ///Consumes the body
+    pub fn string_body(&mut self) -> Option<String> {
+        self.bytes_body().map(|body| {
+            let body = body.to_vec();
+            match String::from_utf8(body) {
+                Ok(body) => body,
+                Err(e) => {
+                    self.body.replace(body);
+                    return None;
+                }
+            }
+        })
     }
 }
