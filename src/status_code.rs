@@ -20,7 +20,7 @@ impl std::fmt::Display for StatusCode {
             StatusCode::UnsupportedMediaType => "UNSUPPORTED MEDIA TYPE",
             StatusCode::InternalServerError => "INTERNAL SERVER ERROR",
         };
-        write!(f, "{} {}", self.clone() as u8, status_text)
+        write!(f, "{} {}", self.clone() as u16, status_text)
     }
 }
 
