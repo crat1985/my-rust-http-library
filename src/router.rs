@@ -12,7 +12,7 @@ pub fn get<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
     E: Fn(Request, S) -> F + 'static + Send + Sync,
     F: IntoResponse,
-    S: Clone,
+    S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Get,
@@ -24,7 +24,7 @@ pub fn post<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
     E: Fn(Request, S) -> F + 'static + Send + Sync,
     F: IntoResponse,
-    S: Clone,
+    S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Post,
@@ -36,7 +36,7 @@ pub fn put<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
     E: Fn(Request, S) -> F + 'static + Send + Sync,
     F: IntoResponse,
-    S: Clone,
+    S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Put,
@@ -48,7 +48,7 @@ pub fn patch<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
     E: Fn(Request, S) -> F + 'static + Send + Sync,
     F: IntoResponse,
-    S: Clone,
+    S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Patch,
@@ -60,7 +60,7 @@ pub fn options<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
     E: Fn(Request, S) -> F + 'static + Send + Sync,
     F: IntoResponse,
-    S: Clone,
+    S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Options,
@@ -72,7 +72,7 @@ pub fn delete<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
     E: Fn(Request, S) -> F + 'static + Send + Sync,
     F: IntoResponse,
-    S: Clone,
+    S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Delete,
@@ -80,14 +80,14 @@ where
     )
 }
 
-pub struct Router<S: Clone> {
+pub struct Router<S: Clone + Send + Sync> {
     routes: HashMap<Route, HandlerFn<S>>,
     state: S,
 }
 
 const NOT_FOUND: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
 
-impl<S: Clone> Router<S> {
+impl<S: Clone + Send + Sync> Router<S> {
     pub fn new() -> Router<()> {
         Router {
             routes: HashMap::new(),
