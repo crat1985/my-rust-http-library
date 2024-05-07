@@ -1,15 +1,12 @@
 use std::{
-    collections::HashMap,
+    collections::{hash_map::Entry, HashMap},
     io::{BufRead, BufReader, Read},
     net::{SocketAddr, TcpStream},
 };
 
-use super::{
-    http_version::HttpVersion,
-    method::Method,
-    response::{Response, ResponseBuilder},
-    status_code::StatusCode,
-};
+use crate::{body::Body, error::HttpError, HttpResult};
+
+use super::{http_version::HttpVersion, method::Method};
 
 #[derive(Debug)]
 pub struct Request {
@@ -18,12 +15,15 @@ pub struct Request {
     pub uri: String,
     pub http_version: HttpVersion,
     pub headers: HashMap<String, String>,
-    pub body: Option<String>,
+    pub body: Option<Body>,
 }
 
 impl Request {
-    pub fn new(stream: &mut TcpStream) -> Result<Self, Response> {
-        let peer_addr = stream.peer_addr().unwrap();
+    pub fn new(stream: &mut TcpStream) -> HttpResult<Self> {
+        let peer_addr = match stream.peer_addr() {
+            Ok(addr) => addr,
+            Err(e) => return Err(HttpError::GetPeerAddrError(e)),
+        };
 
         let mut buf = BufReader::new(stream);
 
@@ -56,30 +56,35 @@ impl Request {
             None
         } else {
             if !headers.contains_key("content-type") {
-                let res = ResponseBuilder::new()
-                    .with_status_code(StatusCode::Forbidden)
-                    .build();
-                return Err(res);
-            }
-            if !headers.contains_key("content-length") {
-                let res = ResponseBuilder::new()
-                    .with_status_code(StatusCode::Forbidden)
-                    .build();
-                return Err(res);
+                return Err(HttpError::ContentTypeMissing);
             }
 
-            let content_length_header = headers
-                .get("content-length")
-                .unwrap()
-                .parse::<usize>()
-                .unwrap();
+            match headers.entry("content-length".to_string()) {
+                Entry::Occupied(header) => {
+                    let header = header.get();
+                    let content_length_header = match header.parse::<usize>() {
+                        Ok(length) => length,
+                        Err(e) => {
+                            return Err(HttpError::InvalidLength(e));
+                        }
+                    };
 
-            let mut body = Vec::with_capacity(content_length_header);
-            buf.read(&mut body).unwrap();
-            if body.is_empty() {
-                None
-            } else {
-                Some(String::from_utf8(body).unwrap())
+                    let mut body = Vec::with_capacity(content_length_header);
+                    let count = buf.read(&mut body).unwrap();
+                    if count == 0 {
+                        None
+                    } else {
+                        let body = match String::from_utf8(body.clone()) {
+                            Ok(body) => Body::String(body),
+                            Err(_) => Body::Bytes(body),
+                        };
+                        Some(body)
+                    }
+                }
+
+                Entry::Vacant(_) => {
+                    return Err(HttpError::LengthMissing);
+                }
             }
         };
 

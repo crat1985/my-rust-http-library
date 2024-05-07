@@ -49,12 +49,6 @@ impl IntoResponse for Response {
     }
 }
 
-impl IntoResponse for StatusCode {
-    fn into_response(self) -> Response {
-        ResponseBuilder::new().with_status_code(self).build()
-    }
-}
-
 impl<E: IntoResponse> IntoResponse for Result<E, Infallible> {
     fn into_response(self) -> Response {
         self.unwrap().into_response()
