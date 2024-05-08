@@ -32,3 +32,9 @@ fn hello_world_handler(req: Request) -> Response {
         .build()
 }
 ```
+
+Features :
+[x] Basic request parsing (HTTP/1.1)
+[x] Basic router without URL parameters nor path parameters
+[ ] Router with URL parameters and path parameters
+[ ] WebSockets
