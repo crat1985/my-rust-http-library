@@ -14,7 +14,7 @@ fn main() -> my_http_server_library::Result<()> {
     Ok(())
 }
 
-fn hello_world_handler(req: Request, state: Arc<&str>) -> Response {
+fn hello_world_handler(req: Request, state: ()) -> Response {
     let content = include_str!("./index.html");
     ResponseBuilder::new()
         .with_body(content, BodyKind::Html)
