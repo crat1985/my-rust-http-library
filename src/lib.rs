@@ -48,7 +48,7 @@ pub fn serve<S: Clone + Send + Sync + 'static>(
 }
 
 fn handle_client<S: Clone + Send + Sync>(mut stream: TcpStream, router: &Router<S>) {
-    let req = match Request::new(&mut stream, router.state().clone()) {
+    let req = match Request::parse(&mut stream, router.state().clone()) {
         Ok(req) => req,
         Err(e) => {
             e.into_response().send_to_stream(&mut stream);
@@ -56,7 +56,53 @@ fn handle_client<S: Clone + Send + Sync>(mut stream: TcpStream, router: &Router<
         }
     };
 
-    //println!("Request : {req:?}");
+    match router.handle(req, &mut stream) {
+        Ok(()) => (),
+        Err(e) => e.into_response().send_to_stream(&mut stream),
+    }
+}
 
-    router.handle(req, &mut stream)
+#[cfg(test)]
+mod tests {
+    use std::{
+        io::{BufRead, BufReader, Write},
+        net::{TcpListener, TcpStream},
+        thread,
+    };
+
+    use crate::router::Router;
+
+    #[test]
+    fn test_app() {
+        let router = Router::new().get("/", move |req| "slt");
+
+        let listener = TcpListener::bind("0.0.0.0:8080").unwrap();
+
+        thread::spawn(move || {
+            crate::serve(listener, router).unwrap();
+        });
+
+        let mut connection = TcpStream::connect("127.0.0.1:8080").unwrap();
+        let req = r#"GET / HTTP/1.1"#;
+        connection.write(req.as_bytes()).unwrap();
+        let mut buf = BufReader::new(&mut connection);
+        let mut result = String::new();
+        buf.read_line(&mut result).unwrap();
+        println!("{result}");
+        assert_eq!(r#"HTTP/1.1 200 OK"#, result.trim());
+
+        let req = r#"GET /a HTTP/1.1"#;
+        connection.write(req.as_bytes()).unwrap();
+        let mut buf = BufReader::new(&mut connection);
+        let mut result = String::new();
+        buf.read_line(&mut result).unwrap();
+        assert_eq!(r#"HTTP/1.1 404 NOT FOUND"#, result.trim());
+
+        let req = r#"POST / HTTP/1.1"#;
+        connection.write(req.as_bytes()).unwrap();
+        let mut buf = BufReader::new(&mut connection);
+        let mut result = String::new();
+        buf.read_line(&mut result).unwrap();
+        assert_eq!(r#"HTTP/1.1 405 METHOD NOT ALLOWED"#, result.trim());
+    }
 }

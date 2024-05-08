@@ -1,134 +1,125 @@
-use std::{collections::HashMap, io::Write, net::TcpStream};
+use std::{collections::HashMap, net::TcpStream};
 
-use crate::response::Response;
+use crate::{response::Response, status_code::StatusCode, ws::WebSocket};
 
 use super::{method::Method, request::Request, response::IntoResponse};
 
 type HandlerFn<S> = Box<dyn Fn(Request<S>) -> Response + Send + Sync>;
 
-pub struct MethodAndHandlerFn<S: Clone>(Method, HandlerFn<S>);
-
-pub fn get<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
-where
-    E: Fn(Request<S>) -> F + 'static + Send + Sync,
-    F: IntoResponse,
-    S: Clone + Send + Sync,
-{
-    MethodAndHandlerFn(
-        Method::Get,
-        Box::new(move |req| handler(req).into_response()),
-    )
-}
-
-pub fn post<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
-where
-    E: Fn(Request<S>) -> F + 'static + Send + Sync,
-    F: IntoResponse,
-    S: Clone + Send + Sync,
-{
-    MethodAndHandlerFn(
-        Method::Post,
-        Box::new(move |req| handler(req).into_response()),
-    )
-}
-
-pub fn put<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
-where
-    E: Fn(Request<S>) -> F + 'static + Send + Sync,
-    F: IntoResponse,
-    S: Clone + Send + Sync,
-{
-    MethodAndHandlerFn(
-        Method::Put,
-        Box::new(move |req| handler(req).into_response()),
-    )
-}
-
-pub fn patch<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
-where
-    E: Fn(Request<S>) -> F + 'static + Send + Sync,
-    F: IntoResponse,
-    S: Clone + Send + Sync,
-{
-    MethodAndHandlerFn(
-        Method::Patch,
-        Box::new(move |req| handler(req).into_response()),
-    )
-}
-
-pub fn options<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
-where
-    E: Fn(Request<S>) -> F + 'static + Send + Sync,
-    F: IntoResponse,
-    S: Clone + Send + Sync,
-{
-    MethodAndHandlerFn(
-        Method::Options,
-        Box::new(move |req| handler(req).into_response()),
-    )
-}
-
-pub fn delete<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
-where
-    E: Fn(Request<S>) -> F + 'static + Send + Sync,
-    F: IntoResponse,
-    S: Clone + Send + Sync,
-{
-    MethodAndHandlerFn(
-        Method::Delete,
-        Box::new(move |req| handler(req).into_response()),
-    )
-}
-
 pub struct Router<S: Clone> {
     routes: HashMap<Route, HandlerFn<S>>,
-    ws_route: Option<String>,
     state: S,
 }
 
-const NOT_FOUND: &str = "HTTP/1.1 404 Not Found\r\n\r\n";
-
-impl<S: Clone> Router<S> {
+impl Router<()> {
     pub fn new() -> Router<()> {
         Router {
             routes: HashMap::new(),
-            ws_route: None,
             state: (),
         }
     }
+}
+
+impl<S: Clone> Router<S> {
     pub fn with_state(state: S) -> Router<S> {
         Router {
             routes: HashMap::new(),
-            ws_route: None,
             state,
         }
     }
-    pub fn route(
-        mut self,
+
+    pub fn get<E: IntoResponse>(
+        self,
         uri: &str,
-        MethodAndHandlerFn(method, handler): MethodAndHandlerFn<S>,
+        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
     ) -> Self {
-        let route = Route::new(method, uri);
+        self.several_methods(vec![Method::Get], uri, handler)
+    }
+
+    pub fn post<E: IntoResponse>(
+        self,
+        uri: &str,
+        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
+    ) -> Self {
+        self.several_methods(vec![Method::Post], uri, handler)
+    }
+    pub fn put<E: IntoResponse>(
+        self,
+        uri: &str,
+        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
+    ) -> Self {
+        self.several_methods(vec![Method::Put], uri, handler)
+    }
+    pub fn patch<E: IntoResponse>(
+        self,
+        uri: &str,
+        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
+    ) -> Self {
+        self.several_methods(vec![Method::Patch], uri, handler)
+    }
+    pub fn options<E: IntoResponse>(
+        self,
+        uri: &str,
+        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
+    ) -> Self {
+        self.several_methods(vec![Method::Options], uri, handler)
+    }
+    pub fn delete<E: IntoResponse>(
+        self,
+        uri: &str,
+        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
+    ) -> Self {
+        self.several_methods(vec![Method::Delete], uri, handler)
+    }
+
+    pub fn several_methods<E: IntoResponse>(
+        mut self,
+        methods: Vec<Method>,
+        uri: &str,
+        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
+    ) -> Self {
+        let route = Route {
+            methods,
+            uri: uri.to_string(),
+        };
+        let handler = Box::new(move |req| handler(req).into_response());
         self.routes.insert(route, handler);
         self
     }
-    pub fn ws_route(mut self, uri: &str) -> Self {
-        self.ws_route = Some(uri.to_string());
+
+    pub fn ws_route(mut self, uri: &str, handler: fn(WebSocket)) -> Self {
+        let route = Route {
+            methods: vec![Method::Get],
+            uri: uri.to_string(),
+        };
+        let handler = Box::new(move |req| {
+            let ws = WebSocket::from_request(req).unwrap();
+            handler(ws);
+            StatusCode::Ok.into_response()
+        });
+        self.routes.insert(route, handler);
         self
     }
-    pub fn handle(&self, req: Request<S>, stream: &mut TcpStream) {
-        let route = Route::new(req.method().clone(), req.uri());
-        let handler = match self.routes.get(&route) {
-            Some(handler) => handler,
-            None => {
-                stream.write(NOT_FOUND.as_bytes()).unwrap();
-                return;
-            }
+
+    pub fn handle(&self, req: Request<S>, stream: &mut TcpStream) -> Result<(), StatusCode> {
+        let mut matching_routes = self
+            .routes
+            .iter()
+            .filter(|(route, _)| route.uri == req.uri());
+
+        if matching_routes.clone().count() == 0 {
+            return Err(StatusCode::NotFound);
+        }
+
+        let mut res = match matching_routes.find(|(route, _)| route.methods.contains(req.method()))
+        {
+            Some((_, handler)) => handler(req),
+            None => return Err(StatusCode::MethodNotAllowed),
         };
-        let _ = route;
-        let mut res = handler(req).into_response();
 
         res.send_to_stream(stream);
+
+        Ok(())
     }
 
     pub fn state(&self) -> &S {
@@ -138,14 +129,14 @@ impl<S: Clone> Router<S> {
 
 #[derive(PartialEq, Eq, Hash)]
 pub struct Route {
-    method: Method,
+    methods: Vec<Method>,
     uri: String,
 }
 
 impl Route {
-    pub fn new(method: Method, uri: &str) -> Self {
+    pub fn new(methods: Vec<Method>, uri: &str) -> Self {
         Self {
-            method,
+            methods,
             uri: uri.to_string(),
         }
     }

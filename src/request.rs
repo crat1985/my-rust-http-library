@@ -13,6 +13,7 @@ pub struct Request<S: Clone> {
     peer_addr: SocketAddr,
     method: Method,
     uri: String,
+    query: HashMap<String, String>,
     http_version: HttpVersion,
     headers: HashMap<String, String>,
     body: Option<Vec<u8>>,
@@ -20,7 +21,7 @@ pub struct Request<S: Clone> {
 }
 
 impl<S: Clone> Request<S> {
-    pub fn new(stream: &mut TcpStream, state: S) -> HttpResult<Self> {
+    pub fn parse(stream: &mut TcpStream, state: S) -> HttpResult<Self> {
         let peer_addr = match stream.peer_addr() {
             Ok(addr) => addr,
             Err(e) => return Err(HttpError::GetPeerAddrError(e)),
@@ -29,6 +30,8 @@ impl<S: Clone> Request<S> {
         let mut buf = BufReader::new(stream);
 
         let (method, uri, http_version) = Self::get_and_parse_request_line(&mut buf);
+
+        let (uri, query) = Self::parse_query_from_uri(&uri)?;
 
         let mut headers = Self::get_and_parse_headers(&mut buf);
 
@@ -62,6 +65,7 @@ impl<S: Clone> Request<S> {
             peer_addr,
             method,
             uri: uri.to_string(),
+            query,
             http_version,
             headers,
             body,
@@ -101,6 +105,27 @@ impl<S: Clone> Request<S> {
         headers
     }
 
+    /// Parse the URI and returns the URI and the query
+    fn parse_query_from_uri(uri: &str) -> HttpResult<(String, HashMap<String, String>)> {
+        let (uri, query) = match uri.split_once('?') {
+            Some((uri, query)) => {
+                let params = query.split('&');
+                let mut query = HashMap::new();
+                for param in params {
+                    match param.split_once('=') {
+                        Some((name, value)) => {
+                            query.insert(name.to_string(), value.to_string());
+                        }
+                        None => return Err(HttpError::InvalidQuery),
+                    }
+                }
+                (uri.to_string(), query)
+            }
+            None => (uri.to_string(), HashMap::new()),
+        };
+        Ok((uri, query))
+    }
+
     pub fn peer_addr(&self) -> SocketAddr {
         self.peer_addr
     }
@@ -111,6 +136,10 @@ impl<S: Clone> Request<S> {
 
     pub fn uri(&self) -> &str {
         &self.uri
+    }
+
+    pub fn query(&self) -> &HashMap<String, String> {
+        &self.query
     }
 
     pub fn http_version(&self) -> &HttpVersion {

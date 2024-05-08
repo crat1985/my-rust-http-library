@@ -1,12 +1,14 @@
 use std::{collections::HashMap, convert::Infallible, io::Write, net::TcpStream};
 
-use super::{header::Header, http_version::HttpVersion, status_code::StatusCode};
+use crate::header;
+
+use super::{http_version::HttpVersion, status_code::StatusCode};
 
 #[derive(Debug)]
 pub struct Response {
     pub http_version: HttpVersion,
     pub status_code: StatusCode,
-    pub headers: HashMap<Header, String>,
+    pub headers: HashMap<String, String>,
     pub body: Option<String>,
 }
 
@@ -18,8 +20,10 @@ impl Response {
             0
         };
 
-        self.headers
-            .insert(Header::ContentLength, content_length.to_string());
+        self.headers.insert(
+            header::CONTENT_LENGTH.to_string(),
+            content_length.to_string(),
+        );
 
         println!("Response : {self:#?}");
 
@@ -64,10 +68,18 @@ impl<E: IntoResponse, F: IntoResponse> IntoResponse for Result<E, F> {
     }
 }
 
+impl IntoResponse for &str {
+    fn into_response(self) -> Response {
+        ResponseBuilder::new()
+            .with_body(self, BodyKind::Text)
+            .build()
+    }
+}
+
 pub struct ResponseBuilder {
     http_version: Option<HttpVersion>,
     status_code: Option<StatusCode>,
-    headers: HashMap<Header, String>,
+    headers: HashMap<String, String>,
     body: Option<String>,
 }
 
@@ -104,14 +116,16 @@ impl ResponseBuilder {
         self.status_code = Some(status_code);
         self
     }
-    pub fn append_header(mut self, name: Header, value: &str) -> Self {
-        self.headers.insert(name, value.to_string());
+    pub fn append_header(mut self, name: &str, value: &str) -> Self {
+        self.headers.insert(name.to_string(), value.to_string());
         self
     }
     pub fn with_body(mut self, body: &str, kind: BodyKind) -> Self {
         self.body = Some(body.to_string());
-        self.headers
-            .insert(Header::ContentType, kind.content_type().to_string());
+        self.headers.insert(
+            header::CONTENT_TYPE.to_string(),
+            kind.content_type().to_string(),
+        );
         self
     }
     pub fn build(self) -> Response {
