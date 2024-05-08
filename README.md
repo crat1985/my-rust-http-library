@@ -1,6 +1,6 @@
 A tiny HTTP server library without any dependencies.
 
-Example :
+# Example
 
 ```rust
 #[derive(Clone)]
@@ -33,7 +33,7 @@ fn hello_world_handler(req: Request) -> Response {
 }
 ```
 
-Features :
+# Features
 
 - [x] Basic request parsing (HTTP/1.1)
 - [x] Basic router without URL parameters nor path parameters
