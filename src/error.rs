@@ -46,6 +46,14 @@ impl IntoResponse for HttpError {
                 println!("[WARN] Invalid String body : {e}");
                 StatusCode::UnsupportedMediaType.into_response()
             }
+            HttpError::MissingBytesBody => {
+                println!("[WARN] Missing bytes body");
+                StatusCode::BadRequest.into_response()
+            }
+            HttpError::MissingStringBody => {
+                println!("[WARN] Missing String body");
+                StatusCode::BadRequest.into_response()
+            }
         }
     }
 }

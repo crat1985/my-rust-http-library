@@ -4,84 +4,85 @@ use crate::response::Response;
 
 use super::{method::Method, request::Request, response::IntoResponse};
 
-type HandlerFn<S> = Box<dyn Fn(Request, S) -> Response + Send + Sync>;
+type HandlerFn<S> = Box<dyn Fn(Request<S>) -> Response + Send + Sync>;
 
 pub struct MethodAndHandlerFn<S: Clone>(Method, HandlerFn<S>);
 
 pub fn get<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
-    E: Fn(Request, S) -> F + 'static + Send + Sync,
+    E: Fn(Request<S>) -> F + 'static + Send + Sync,
     F: IntoResponse,
     S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Get,
-        Box::new(move |req, state| handler(req, state).into_response()),
+        Box::new(move |req| handler(req).into_response()),
     )
 }
 
 pub fn post<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
-    E: Fn(Request, S) -> F + 'static + Send + Sync,
+    E: Fn(Request<S>) -> F + 'static + Send + Sync,
     F: IntoResponse,
     S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Post,
-        Box::new(move |req, state| handler(req, state).into_response()),
+        Box::new(move |req| handler(req).into_response()),
     )
 }
 
 pub fn put<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
-    E: Fn(Request, S) -> F + 'static + Send + Sync,
+    E: Fn(Request<S>) -> F + 'static + Send + Sync,
     F: IntoResponse,
     S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Put,
-        Box::new(move |req, state| handler(req, state).into_response()),
+        Box::new(move |req| handler(req).into_response()),
     )
 }
 
 pub fn patch<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
-    E: Fn(Request, S) -> F + 'static + Send + Sync,
+    E: Fn(Request<S>) -> F + 'static + Send + Sync,
     F: IntoResponse,
     S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Patch,
-        Box::new(move |req, state| handler(req, state).into_response()),
+        Box::new(move |req| handler(req).into_response()),
     )
 }
 
 pub fn options<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
-    E: Fn(Request, S) -> F + 'static + Send + Sync,
+    E: Fn(Request<S>) -> F + 'static + Send + Sync,
     F: IntoResponse,
     S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Options,
-        Box::new(move |req, state| handler(req, state).into_response()),
+        Box::new(move |req| handler(req).into_response()),
     )
 }
 
 pub fn delete<E, F, S>(handler: E) -> MethodAndHandlerFn<S>
 where
-    E: Fn(Request, S) -> F + 'static + Send + Sync,
+    E: Fn(Request<S>) -> F + 'static + Send + Sync,
     F: IntoResponse,
     S: Clone + Send + Sync,
 {
     MethodAndHandlerFn(
         Method::Delete,
-        Box::new(move |req, state| handler(req, state).into_response()),
+        Box::new(move |req| handler(req).into_response()),
     )
 }
 
 pub struct Router<S: Clone> {
     routes: HashMap<Route, HandlerFn<S>>,
+    ws_route: Option<String>,
     state: S,
 }
 
@@ -91,12 +92,14 @@ impl<S: Clone> Router<S> {
     pub fn new() -> Router<()> {
         Router {
             routes: HashMap::new(),
+            ws_route: None,
             state: (),
         }
     }
     pub fn with_state(state: S) -> Router<S> {
         Router {
             routes: HashMap::new(),
+            ws_route: None,
             state,
         }
     }
@@ -109,8 +112,12 @@ impl<S: Clone> Router<S> {
         self.routes.insert(route, handler);
         self
     }
-    pub fn handle(&self, req: Request, stream: &mut TcpStream) {
-        let route = Route::new(req.method.clone(), &req.uri);
+    pub fn ws_route(mut self, uri: &str) -> Self {
+        self.ws_route = Some(uri.to_string());
+        self
+    }
+    pub fn handle(&self, req: Request<S>, stream: &mut TcpStream) {
+        let route = Route::new(req.method().clone(), req.uri());
         let handler = match self.routes.get(&route) {
             Some(handler) => handler,
             None => {
@@ -119,9 +126,13 @@ impl<S: Clone> Router<S> {
             }
         };
         let _ = route;
-        let mut res = handler(req, self.state.clone()).into_response();
+        let mut res = handler(req).into_response();
 
         res.send_to_stream(stream);
+    }
+
+    pub fn state(&self) -> &S {
+        &self.state
     }
 }
 

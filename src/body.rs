@@ -1,9 +1,3 @@
-// #[derive(Debug)]
-// pub enum Body {
-//     String(String),
-//     Bytes(Vec<u8>),
-// }
-
 use std::{
     io::{BufReader, Read},
     net::TcpStream,
@@ -39,22 +33,6 @@ impl BodyTrait for Vec<u8> {
             return Err(HttpError::InvalidBytesBody(e));
         }
         Ok(body)
-    }
-}
-
-impl BodyTrait for String {
-    type Error = HttpError;
-
-    fn parse_request(
-        buf: &mut BufReader<&mut TcpStream>,
-        content_length_header: usize,
-    ) -> Result<Self, Self::Error>
-    where
-        Self: Sized,
-        Self::Error: IntoResponse,
-    {
-        let body = Vec::<u8>::parse_request(buf, content_length_header)?;
-        String::from_utf8(body).map_err(|e| HttpError::InvalidStringBody(e))
     }
 }
 

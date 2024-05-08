@@ -9,17 +9,18 @@ use crate::{body::BodyTrait, error::HttpError, HttpResult};
 use super::{http_version::HttpVersion, method::Method};
 
 #[derive(Debug)]
-pub struct Request {
+pub struct Request<S: Clone> {
     peer_addr: SocketAddr,
     method: Method,
     uri: String,
     http_version: HttpVersion,
     headers: HashMap<String, String>,
     body: Option<Vec<u8>>,
+    state: S,
 }
 
-impl Request {
-    pub fn new(stream: &mut TcpStream) -> HttpResult<Self> {
+impl<S: Clone> Request<S> {
+    pub fn new(stream: &mut TcpStream, state: S) -> HttpResult<Self> {
         let peer_addr = match stream.peer_addr() {
             Ok(addr) => addr,
             Err(e) => return Err(HttpError::GetPeerAddrError(e)),
@@ -64,6 +65,7 @@ impl Request {
             http_version,
             headers,
             body,
+            state,
         };
 
         Ok(req)
@@ -138,5 +140,9 @@ impl Request {
         } else {
             None
         }
+    }
+
+    pub fn state(&self) -> &S {
+        &self.state
     }
 }

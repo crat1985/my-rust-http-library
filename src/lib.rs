@@ -1,12 +1,3 @@
-use std::{
-    net::{TcpListener, TcpStream},
-    sync::Arc,
-};
-
-use crate::{request::Request, response::IntoResponse};
-
-use self::router::Router;
-
 pub mod body;
 pub mod error;
 pub mod header;
@@ -16,6 +7,16 @@ pub mod request;
 pub mod response;
 pub mod router;
 pub mod status_code;
+pub mod ws;
+
+use std::{
+    net::{TcpListener, TcpStream},
+    sync::Arc,
+};
+
+use crate::{request::Request, response::IntoResponse};
+
+use self::router::Router;
 
 pub type Result<T> = std::result::Result<T, error::Error>;
 pub type HttpResult<T> = std::result::Result<T, error::HttpError>;
@@ -47,7 +48,7 @@ pub fn serve<S: Clone + Send + Sync + 'static>(
 }
 
 fn handle_client<S: Clone + Send + Sync>(mut stream: TcpStream, router: &Router<S>) {
-    let req = match Request::new(&mut stream) {
+    let req = match Request::new(&mut stream, router.state().clone()) {
         Ok(req) => req,
         Err(e) => {
             e.into_response().send_to_stream(&mut stream);
@@ -55,7 +56,7 @@ fn handle_client<S: Clone + Send + Sync>(mut stream: TcpStream, router: &Router<
         }
     };
 
-    println!("Request : {req:?}");
+    //println!("Request : {req:?}");
 
     router.handle(req, &mut stream)
 }

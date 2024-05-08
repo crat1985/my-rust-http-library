@@ -3,6 +3,7 @@ use crate::response::{IntoResponse, Response, ResponseBuilder};
 #[derive(Debug, Clone)]
 pub enum StatusCode {
     Ok = 200,
+    BadRequest = 400,
     Forbidden = 403,
     NotFound = 404,
     LengthRequired = 411,
@@ -14,6 +15,7 @@ impl std::fmt::Display for StatusCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let status_text = match self {
             StatusCode::Ok => "OK",
+            StatusCode::BadRequest => "BAD REQUEST",
             StatusCode::Forbidden => "FORBIDDEN",
             StatusCode::NotFound => "NOT FOUND",
             StatusCode::LengthRequired => "LENGTH REQUIRED",
