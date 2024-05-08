@@ -126,15 +126,17 @@ impl Request {
 
     ///Consumes the body
     pub fn string_body(&mut self) -> Option<String> {
-        self.bytes_body().map(|body| {
+        if let Some(body) = self.bytes_body() {
             let body = body.to_vec();
             match String::from_utf8(body) {
-                Ok(body) => body,
+                Ok(body) => Some(body),
                 Err(e) => {
-                    self.body.replace(body);
-                    return None;
+                    eprintln!("Non-String body : {e}");
+                    None
                 }
             }
-        })
+        } else {
+            None
+        }
     }
 }

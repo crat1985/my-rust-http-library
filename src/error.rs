@@ -3,6 +3,7 @@ use crate::{
     status_code::StatusCode,
 };
 
+#[derive(Debug)]
 pub enum Error {
     TcpStreamError(std::io::Error),
 }

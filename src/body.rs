@@ -70,6 +70,7 @@ impl BodyTrait for () {
     }
 }
 
+/// The body of the request
 #[derive(Debug)]
 pub enum Body {
     None,
