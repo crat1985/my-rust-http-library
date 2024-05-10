@@ -41,3 +41,5 @@ fn hello_world_handler(req: Request) -> Response {
   - [x] URL parameters
   - [ ] Path parameters
 - [ ] WebSockets
+- [ ] CORS
+- [ ] TLS support
