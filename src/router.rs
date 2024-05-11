@@ -1,13 +1,17 @@
-use std::{collections::HashMap, net::TcpStream};
+use std::{collections::HashMap, sync::Arc};
 
-use crate::{response::Response, status_code::StatusCode, ws::WebSocket};
+use crate::{
+    response::{IntoResponse, Response},
+    route_path::Node,
+    status_code::StatusCode,
+};
 
-use super::{method::Method, request::Request, response::IntoResponse};
+use super::{method::Method, request::Request};
 
-type HandlerFn<S> = Box<dyn Fn(Request<S>) -> Response + Send + Sync>;
+pub(crate) type HandlerFn<S> = Arc<dyn Fn(Request<S>) -> Response + Send + Sync>;
 
 pub struct Router<S: Clone> {
-    routes: HashMap<Route, HandlerFn<S>>,
+    routes: HashMap<Method, Node<S>>,
     state: S,
 }
 
@@ -20,7 +24,7 @@ impl Router<()> {
     }
 }
 
-impl<S: Clone> Router<S> {
+impl<S: Clone + 'static> Router<S> {
     pub fn with_state(state: S) -> Router<S> {
         Router {
             routes: HashMap::new(),
@@ -28,116 +32,74 @@ impl<S: Clone> Router<S> {
         }
     }
 
-    pub fn get<E: IntoResponse>(
-        self,
-        uri: &str,
-        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
-    ) -> Self {
-        self.several_methods(vec![Method::Get], uri, handler)
+    pub fn get<E: IntoResponse + 'static>(self, uri: &str, handler: fn(Request<S>) -> E) -> Self {
+        self.insert(Method::Get, uri, handler)
     }
 
-    pub fn post<E: IntoResponse>(
-        self,
-        uri: &str,
-        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
-    ) -> Self {
-        self.several_methods(vec![Method::Post], uri, handler)
+    pub fn post<E: IntoResponse + 'static>(self, uri: &str, handler: fn(Request<S>) -> E) -> Self {
+        self.insert(Method::Post, uri, handler)
     }
-    pub fn put<E: IntoResponse>(
-        self,
-        uri: &str,
-        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
-    ) -> Self {
-        self.several_methods(vec![Method::Put], uri, handler)
+    pub fn put<E: IntoResponse + 'static>(self, uri: &str, handler: fn(Request<S>) -> E) -> Self {
+        self.insert(Method::Put, uri, handler)
     }
-    pub fn patch<E: IntoResponse>(
-        self,
-        uri: &str,
-        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
-    ) -> Self {
-        self.several_methods(vec![Method::Patch], uri, handler)
+    pub fn patch<E: IntoResponse + 'static>(self, uri: &str, handler: fn(Request<S>) -> E) -> Self {
+        self.insert(Method::Patch, uri, handler)
     }
-    pub fn options<E: IntoResponse>(
+    pub fn options<E: IntoResponse + 'static>(
         self,
         uri: &str,
-        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
+        handler: fn(Request<S>) -> E,
     ) -> Self {
-        self.several_methods(vec![Method::Options], uri, handler)
+        self.insert(Method::Options, uri, handler)
     }
-    pub fn delete<E: IntoResponse>(
+    pub fn delete<E: IntoResponse + 'static>(
         self,
         uri: &str,
-        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
+        handler: fn(Request<S>) -> E,
     ) -> Self {
-        self.several_methods(vec![Method::Delete], uri, handler)
+        self.insert(Method::Delete, uri, handler)
     }
 
-    pub fn several_methods<E: IntoResponse>(
+    pub fn insert<E: IntoResponse + 'static>(
         mut self,
-        methods: Vec<Method>,
+        method: Method,
         uri: &str,
-        handler: impl Fn(Request<S>) -> E + Send + Sync + 'static,
+        handler: fn(Request<S>) -> E,
     ) -> Self {
-        let route = Route {
-            methods,
-            uri: uri.to_string(),
-        };
-        let handler = Box::new(move |req| handler(req).into_response());
-        self.routes.insert(route, handler);
+        let node = self.routes.entry(method).or_insert(Node::new("/"));
+        let handler = Arc::new(move |req| handler(req).into_response());
+        node.insert(uri, handler);
+
         self
     }
 
-    pub fn ws_route(mut self, uri: &str, handler: fn(WebSocket)) -> Self {
-        let route = Route {
-            methods: vec![Method::Get],
-            uri: uri.to_string(),
-        };
-        let handler = Box::new(move |req| {
-            let ws = WebSocket::from_request(req).unwrap();
-            handler(ws);
-            StatusCode::Ok.into_response()
-        });
-        self.routes.insert(route, handler);
-        self
-    }
+    // pub fn ws_route(mut self, uri: &str, handler: fn(WebSocket)) -> Self {
+    //     let route = Route {
+    //         methods: vec![Method::Get],
+    //         uri: uri.to_string(),
+    //     };
+    //     let handler = Box::new(move |req| {
+    //         let ws = WebSocket::from_request(req).unwrap();
+    //         handler(ws);
+    //         StatusCode::Ok.into_response()
+    //     });
+    //     self.routes.insert(route, handler);
+    //     self
+    // }
 
-    pub fn handle(&self, req: Request<S>, stream: &mut TcpStream) -> Result<(), StatusCode> {
-        let mut matching_routes = self
-            .routes
-            .iter()
-            .filter(|(route, _)| route.uri == req.uri());
-
-        if matching_routes.clone().count() == 0 {
-            return Err(StatusCode::NotFound);
+    pub fn handle(&self, req: Request<S>) -> Response {
+        if let Some(node) = self.routes.get(req.method()) {
+            if let Some(handler) = node.get(req.uri()) {
+                handler(req)
+            } else {
+                StatusCode::NotFound.into_response()
+            }
+        } else {
+            StatusCode::NotFound.into_response()
         }
-
-        let mut res = match matching_routes.find(|(route, _)| route.methods.contains(req.method()))
-        {
-            Some((_, handler)) => handler(req),
-            None => return Err(StatusCode::MethodNotAllowed),
-        };
-
-        res.send_to_stream(stream);
-
-        Ok(())
     }
 
     pub fn state(&self) -> &S {
         &self.state
-    }
-}
-
-#[derive(PartialEq, Eq, Hash)]
-pub struct Route {
-    methods: Vec<Method>,
-    uri: String,
-}
-
-impl Route {
-    pub fn new(methods: Vec<Method>, uri: &str) -> Self {
-        Self {
-            methods,
-            uri: uri.to_string(),
-        }
     }
 }

@@ -1,10 +1,10 @@
 use std::{
     collections::{hash_map::Entry, HashMap},
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     net::{SocketAddr, TcpStream},
 };
 
-use crate::{body::BodyTrait, error::HttpError, HttpResult};
+use crate::{error::HttpError, HttpResult};
 
 use super::{http_version::HttpVersion, method::Method};
 
@@ -55,7 +55,10 @@ impl<S: Clone> Request<S> {
                             return Err(HttpError::InvalidLength(e));
                         }
                     };
-                    let body = Vec::<u8>::parse_request(&mut buf, content_length_header)?;
+                    let mut body: Vec<u8> = vec![0; content_length_header];
+                    if let Err(e) = buf.read_exact(&mut body) {
+                        return Err(HttpError::InvalidBytesBody(e));
+                    }
                     Some(body)
                 }
             }

@@ -1,10 +1,10 @@
-pub mod body;
 pub mod error;
 pub mod header;
 pub mod http_version;
 pub mod method;
 pub mod request;
 pub mod response;
+pub mod route_path;
 pub mod router;
 pub mod status_code;
 pub mod ws;
@@ -32,22 +32,23 @@ pub fn serve<S: Clone + Send + Sync + 'static>(
             Ok(stream) => stream,
             Err(e) => return Err(error::Error::TcpStreamError(e)),
         };
-        let thread = std::thread::spawn({
-            let router = router.clone();
-            move || {
-                handle_client(stream, &router);
-            }
-        });
+        let thread = smol::spawn(handle_client(stream, router.clone()));
         threads.push(thread);
     }
-    let _ = threads
-        .into_iter()
-        .map(|thread| thread.join().unwrap())
-        .collect::<Vec<()>>();
+
+    smol::block_on(async {
+        for thread in threads {
+            thread.detach();
+        }
+    });
+
     Ok(())
 }
 
-fn handle_client<S: Clone + Send + Sync>(mut stream: TcpStream, router: &Router<S>) {
+async fn handle_client<S: Clone + Send + Sync + 'static>(
+    mut stream: TcpStream,
+    router: Arc<Router<S>>,
+) {
     let req = match Request::parse(&mut stream, router.state().clone()) {
         Ok(req) => req,
         Err(e) => {
@@ -56,10 +57,9 @@ fn handle_client<S: Clone + Send + Sync>(mut stream: TcpStream, router: &Router<
         }
     };
 
-    match router.handle(req, &mut stream) {
-        Ok(()) => (),
-        Err(e) => e.into_response().send_to_stream(&mut stream),
-    }
+    let mut res = router.handle(req);
+
+    res.send_to_stream(&mut stream);
 }
 
 #[cfg(test)]
